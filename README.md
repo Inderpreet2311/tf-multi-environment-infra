@@ -13,35 +13,50 @@ This mirrors how real enterprise teams manage infrastructure at scale — one co
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────┐
-│                   Terraform Code                    │
-│              (Single Source of Truth)               │
-└──────────────┬──────────────┬──────────────┬────────┘
-               │              │              │
-         workspace          workspace     workspace
-            dev             staging         prod
-               │              │              │
-        ┌──────▼──────┐ ┌─────▼──────┐ ┌────▼───────┐
-        │   Dev VPC   │ │Staging VPC │ │  Prod VPC  │
-        │  10.0.0.0/16│ │10.1.0.0/16 │ │10.2.0.0/16 │
-        │             │ │            │ │            │
-        │  t3.micro   │ │  t3.small  │ │  t3.medium │
-        └─────────────┘ └────────────┘ └────────────┘
-```
+### Dev Environment
+![Dev Architecture](screenshots/architecture-dev.png)
+
+### Staging Environment
+![Staging Architecture](screenshots/architecture-staging.png)
+
+### Production Environment
+![Prod Architecture](screenshots/architecture-prod.png)
 
 ---
 
-## Resources Provisioned
+## Resources Provisioned Per Environment
 
 | Resource | Dev | Staging | Production |
 |---|---|---|---|
-| VPC | ✅ | ✅ | ✅ |
-| Public Subnet | ✅ | ✅ | ✅ |
-| Private Subnet | ✅ | ✅ | ✅ |
+| VPC | 10.0.0.0/16 | 10.1.0.0/16 | 10.2.0.0/16 |
+| Public Subnet | 10.0.1.0/24 | 10.1.1.0/24 | 10.2.1.0/24 |
+| Private Subnet | 10.0.2.0/24 | 10.1.2.0/24 | 10.2.2.0/24 |
 | Internet Gateway | ✅ | ✅ | ✅ |
-| EC2 Instance | t3.micro | t3.small | t3.medium |
+| Route Table | ✅ | ✅ | ✅ |
 | Security Group | ✅ | ✅ | ✅ |
+| EC2 Instance | t3.micro | t3.small | t3.micro |
+
+---
+
+## Deployment Evidence
+
+### Dev Environment
+![Dev VPC](screenshots/vpc-dev.png)
+![Dev EC2](screenshots/ec2-dev.png)
+![Dev Subnets](screenshots/subnets-dev.png)
+![Dev Security Group](screenshots/security-group-dev.png)
+
+### Staging Environment
+![Staging VPC](screenshots/vpc-staging.png)
+![Staging EC2](screenshots/ec2-staging.png)
+![Staging Subnets](screenshots/subnets-staging.png)
+![Staging Security Group](screenshots/security-group-staging.png)
+
+### Production Environment
+![Prod VPC](screenshots/vpc-prod.png)
+![Prod EC2](screenshots/ec2-prod.png)
+![Prod Subnets](screenshots/subnets-prod.png)
+![Prod Security Group](screenshots/security-group-prod.png)
 
 ---
 
@@ -68,7 +83,7 @@ project-1-multi-environment/
 ├── providers.tf
 ├── backend.tf
 ├── locals.tf
-├── .gitignore
+├── screenshots/
 └── README.md
 ```
 
@@ -85,15 +100,16 @@ project-1-multi-environment/
 
 ## Remote State Configuration
 
-This project uses an S3 backend with DynamoDB locking to manage state safely across environments.
+This project uses an S3 backend with state locking to manage state safely across environments.
 
 ```hcl
 terraform {
   backend "s3" {
-    bucket         = "your-terraform-state-bucket"
-    key            = "project1/terraform.tfstate"
-    region         = "us-east-1"
-    dynamodb_table = "terraform-lock"
+    bucket       = "your-terraform-state-bucket"
+    key          = "project1/terraform.tfstate"
+    region       = "us-east-1"
+    use_lockfile = true
+    encrypt      = true
   }
 }
 ```
@@ -104,7 +120,7 @@ terraform {
 
 **1. Clone the repository**
 ```bash
-git clone https://github.com/your-username/tf-multi-environment-infra.git
+git clone https://github.com/Inderpreet2311/tf-multi-environment-infra.git
 cd tf-multi-environment-infra
 ```
 
@@ -134,34 +150,36 @@ terraform apply -var-file="environments/dev.tfvars"
 terraform destroy -var-file="environments/dev.tfvars"
 ```
 
-Repeat steps 3–6 using `staging` or `prod` workspace and corresponding `.tfvars` file for other environments.
+Repeat steps 3–6 using `staging` or `prod` workspace and the corresponding `.tfvars` file.
 
 ---
 
 ## Key Concepts Demonstrated
 
 - **Terraform Workspaces** — isolating state per environment using a single codebase
-- **Reusable Modules** — writing VPC and EC2 modules once, consuming them across all environments
-- **Remote State** — S3 backend with DynamoDB locking, mirroring real enterprise setup
-- **Environment Specific Variables** — separate `.tfvars` files per environment
-- **Resource Tagging** — every resource tagged with environment, project, and owner
+- **Reusable Modules** — writing VPC and EC2 modules once, consuming them across all three environments
+- **Remote State** — S3 backend with file locking, mirroring real enterprise setup
+- **Environment Specific Variables** — separate `.tfvars` files per environment with different CIDR ranges and instance types
+- **Resource Tagging** — every resource tagged with environment, project, and owner using locals
 - **Provider Version Pinning** — reproducible deployments across team members
+- **Availability Zone Control** — subnets explicitly pinned to specific AZs for consistency
 
 ---
 
-## What I Learned
+## Real World Lessons Learned
 
-- How Terraform workspaces isolate state without duplicating code
-- How to design modules that are reusable and environment agnostic
-- Why remote state with locking is critical in a team environment
-- How real companies manage dev, staging, and production infrastructure as code
+- AWS does not support all instance types in all availability zones. Explicitly setting `availability_zone` in subnet resources prevents random AZ assignment and deployment failures.
+- Terraform workspaces isolate state completely — destroying dev has zero impact on staging or prod state files.
+- Remote state with locking prevents concurrent apply conflicts in team environments.
+- The `terraform fmt -recursive` command enforces consistent formatting across all module subdirectories.
+- Running `terraform plan` before every apply is non-negotiable — it caught configuration issues before they hit AWS.
 
 ---
 
 ## Author
 
-**Inder** — IT Operations transitioning to Cloud Engineering  
-[LinkedIn](https://linkedin.com/in/your-profile) | [GitHub](https://github.com/your-username)
+**Inder** — IT Operations transitioning to Cloud Engineering
+[LinkedIn](https://linkedin.com/in/your-profile) | [GitHub](https://github.com/Inderpreet2311)
 
 ---
 
